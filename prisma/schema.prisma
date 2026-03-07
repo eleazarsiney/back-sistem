@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  nombre    String
+  password  String
+  permisos  Json     @default("[]") // ["ventas", "compras", "productos", etc.]
+  createdAt DateTime @default(now())
+}
+
+model Proveedor {
+  id                    String                  @id @default(uuid())
+  nombre                String
+  encargado             String
+  telefono              String
+  Departamento          String
+  Municipio             String
+  correlativo           Int
+  direccion             String
+  email                 String
+  createdAt             DateTime                @default(now())
+  Compras               Compra[]
+  PagosRealizadosCompra PagosRealizadosCompra[]
+}
+
+model Cliente {
+  id                   String                  @id @default(uuid())
+  nombre               String
+  encargado            String
+  telefono             String
+  Departamento         String
+  Municipio            String
+  correlativo          Int
+  direccion            String
+  email                String
+  createdAt            DateTime                @default(now())
+  ventas               Venta[]
+  PagosRealizadosVenta PagosRealizadosVentas[]
+}
+
+model Casas {
+  id         String    @id @default(ulid())
+  nombre     String
+  producto   Producto? @relation(fields: [productoId], references: [id])
+  productoId String?
+}
+
+model CodigoDeBarras {
+  id           String  @id @default(ulid())
+  nombre       String
+  codigoBarras String?
+  productoId   String
+  Lotes        Lote[]
+}
+
+model Producto {
+  id           String  @id @default(uuid())
+  nombre       String
+  descripcion  String
+  codigoBarras String?
+  presentacion String
+  generico     String
+  gramaje      String
+  costo        Float
+  precioVenta  Float
+  alertaStock  Boolean
+  casa         String
+
+  //Cantidades 
+  cantUnidad          Int      @default(0)
+  cantCaja            Int
+  cantBlister         Int
+  // Precios
+  precioUnitario      Float // Precio por unidad
+  precioBlister       Float // Precio por blister
+  precioCaja          Float // Precio por caja
+  // Unidades y empaques
+  // Costos
+  costoCompraUnitario Float // Costo por unidad
+  costoCompraBlister  Float
+  costoCompraCaja     Float
+  // Logística
+  createdAt           DateTime @default(now())
+  Casas               Casas[]
+  lotes               Lote[]
+}
+
+model Lote {
+  id               String          @id @default(ulid())
+  origen           String
+  productoId       String
+  nombre           String
+  fechaVencimiento DateTime?
+  stockTotal       Int             @default(0) // Stock en unidades
+  stockPorCaja     Int             @default(0) // N° de unidades por caja (ej: 12)
+  stockPorBlister  Int             @default(0) // N° de unidades por blister (ej: 6)
+  createdAt        DateTime        @default(now())
+  codigoBarrasId   String?
+  codigoBarras     CodigoDeBarras? @relation(fields: [codigoBarrasId], references: [id])
+  compra           Compra?         @relation(fields: [compraId], references: [id])
+  compraId         String?
+  producto         Producto        @relation(fields: [productoId], references: [id])
+}
+
+model Compra {
+  id               String             @id @default(uuid())
+  Proveedor        String
+  proveedorId      String?
+  observaciones    String
+  correlativo      Int
+  Comprador        String
+  visitador        String
+  total            Int
+  estado           String             @default("sin difinir")
+  fecha            DateTime
+  Lotes            Lote[]
+  DetalleDeCompras DetalleDeCompras[]
+  Proveedores      Proveedor?         @relation(fields: [proveedorId], references: [id])
+}
+
+model PagosRealizadosCompra {
+  id          String     @id @default(ulid())
+  fechaPago   DateTime?
+  monto       Float
+  proveedorId String?
+  Proveedores Proveedor? @relation(fields: [proveedorId], references: [id])
+}
+
+model Venta {
+  id            String           @id @default(uuid())
+  nombreCliente String // ✅ renombrado — era "cliente String"
+  fechaDePago   DateTime?
+  estado        String
+  correlativo   Int
+  total         Float            @default(0)
+  fecha         DateTime
+  noVenta       Int              @unique @default(autoincrement())
+  gananciaTotal Float            @default(0)
+  clienteId     String?
+  detalles      ListaProductos[]
+  cliente       Cliente?         @relation(fields: [clienteId], references: [id])
+}
+
+model PagosRealizadosVentas {
+  id        String    @id @default(ulid())
+  fechaPago DateTime?
+  monto     Float
+  cliente   Cliente?  @relation(fields: [clienteId], references: [id])
+  clienteId String?
+}
+
+model ListaProductos {
+  id                 String    @id @default(uuid())
+  ventaId            String
+  presentacion       String
+  venta              Venta     @relation(fields: [ventaId], references: [id])
+  productoId         String
+  nombreProducto     String
+  subGanancia        Float     @default(0)
+  cantidad           Int
+  subtotal           Float     @default(0)
+  fechaDeVencimiento DateTime?
+  loteId             String
+}
+
+model DetalleDeCompras {
+  id                 String   @id @default(uuid())
+  compraId           String
+  compra             Compra   @relation(fields: [compraId], references: [id])
+  productoId         String
+  stockTotal         Int      @default(0) // Stock en unidades
+  stockPorCaja       Int      @default(0) // N° de unidades por caja (ej: 12)
+  stockPorBlister    Int      @default(0) // N° de unidades por blister (ej: 6)
+  precioCosto        Float
+  fecha              DateTime
+  fechaDeVencimiento DateTime
+  origen             String
+  nombreProducto     String
+  cantidad           Int
+}

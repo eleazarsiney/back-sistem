@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "ListaProductos" ADD COLUMN     "subGanancia" DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "Venta" ADD COLUMN     "gananciaTotal" DOUBLE PRECISION NOT NULL DEFAULT 0;
