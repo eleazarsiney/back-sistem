@@ -8,7 +8,8 @@ export class ProductsController {
 
     constructor(private readonly productsService: ProductsService) { }
 
-    // ── Rutas estáticas primero ──────────────────────────────
+    // ── Rutas estáticas ──────────────────────────────────────
+
     @Get()
     async getAllProducts() {
         return this.productsService.getProducts();
@@ -31,16 +32,6 @@ export class ProductsController {
         return this.productsService.getProductCode(codigo);
     }
 
-    // Actualizar lote existente — estático antes de :id
-    @Put('lotes/:loteId')
-    async updateLote(
-        @Param('loteId') loteId: string,
-        @Body() data: { fechaVencimiento?: string | null; stockTotal?: number }
-    ): Promise<any> {
-        return this.productsService.updateLote(loteId, data);
-    }
-
-    // ✅ NUEVO: Crear lote manual para un producto
     @Post('lotes')
     async crearLote(
         @Body() data: {
@@ -54,7 +45,21 @@ export class ProductsController {
         return this.productsService.crearLoteManual(data);
     }
 
-    // ── Rutas dinámicas al final ─────────────────────────────
+    @Put('lotes/:loteId')
+    async updateLote(
+        @Param('loteId') loteId: string,
+        @Body() data: { fechaVencimiento?: string | null; stockTotal?: number }
+    ): Promise<any> {
+        return this.productsService.updateLote(loteId, data);
+    }
+
+    @Delete('lotes/:loteId')
+    async deleteLote(@Param('loteId') loteId: string): Promise<any> {
+        return this.productsService.deleteLote(loteId);
+    }
+
+    // ── Rutas dinámicas ──────────────────────────────────────
+
     @Post()
     async crearProducto(@Body() data: NuevoProductoCompletoDto) {
         this.logger.log('Datos recibidos para nuevo producto:', JSON.stringify(data));

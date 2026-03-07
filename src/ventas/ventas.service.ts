@@ -537,8 +537,8 @@ export class VentasService {
             where: { id: lista.id },
             data: {
               cantidad: nueva,
-              subtotal: nuevoSubtotal,
-              subGanancia: nuevaSubGanancia,
+              subtotal: item.subtotal ?? nuevoSubtotal,
+              subGanancia: item.subGanancia ?? nuevaSubGanancia,
             }
           });
 

@@ -170,6 +170,7 @@ export class ComprasService {
                                 where: { id: detalleExistente.id },
                                 data: {
                                     cantidad: producto.cantidad,
+                                    precioCosto: producto.precioCosto,  // ← agregar esto
                                     stockPorCaja: producto.stockPorCaja,
                                     stockPorBlister: producto.stockPorBlister,
                                     fecha: parseFecha(producto.fecha),

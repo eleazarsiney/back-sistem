@@ -187,6 +187,10 @@ export class ProductsService {
   }
 
   async deleteProduct(id: string) {
+    await this.prisma.lote.deleteMany({ where: { productoId: id } });
+    await this.prisma.casas.deleteMany({ where: { productoId: id } });
+    await this.prisma.codigoDeBarras.deleteMany({ where: { productoId: id } });
+
     const productoEliminado = await this.prisma.producto.delete({ where: { id } });
 
     this.sseService.emit('producto_eliminado', {
@@ -205,6 +209,30 @@ export class ProductsService {
         Casas: true,
       },
     });
+  }
+
+  async deleteLote(loteId: string) {
+    const loteEliminado = await this.prisma.lote.delete({ where: { id: loteId } });
+
+    const todosLotes = await this.prisma.lote.findMany({
+      where: { productoId: loteEliminado.productoId },
+      select: { stockTotal: true },
+    });
+    const nuevaCantUnidad = todosLotes.reduce((s, l) => s + (l.stockTotal || 0), 0);
+
+    await this.prisma.producto.update({
+      where: { id: loteEliminado.productoId },
+      data: { cantUnidad: nuevaCantUnidad },
+    });
+
+    this.sseService.emit('producto_stock_actualizado', {
+      id: loteEliminado.productoId,
+      cantUnidad: nuevaCantUnidad,
+      motivo: 'lote_eliminado',
+      loteId,
+    });
+
+    return loteEliminado;
   }
 
   // ── Actualizar lote existente ────────────────────────────────────────────────
