@@ -269,8 +269,10 @@ export class ComprasService {
                     where: { compraId: compraId }
                 });
 
-                const nuevoTotal = nuevosDetalles.reduce((sum, detalle) => sum + detalle.cantidad, 0);
-
+                //const nuevoTotal = nuevosDetalles.reduce((sum, detalle) => sum + detalle.cantidad, 0);
+                const nuevoTotal = nuevosDetalles.reduce((sum, detalle) =>
+                    sum + (detalle.cantidad * (detalle.precioCosto ?? 0)), 0);
+                console.log(nuevoTotal)
                 await prisma.compra.update({
                     where: { id: compraId },
                     data: { total: nuevoTotal }
