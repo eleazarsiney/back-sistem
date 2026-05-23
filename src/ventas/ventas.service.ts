@@ -710,9 +710,6 @@ export class VentasService {
 
       await prs.listaProductos.deleteMany({ where: { ventaId } });
 
-      await prs.pagosRealizadosVentas.deleteMany({
-        where: { clienteId: venta.clienteId ?? undefined },
-      });
 
       await prs.venta.delete({ where: { id: ventaId } });
 
@@ -722,6 +719,8 @@ export class VentasService {
         nombreCliente: venta.nombreCliente,
         productosRestaurados: venta.detalles.length,
       };
+    }, {
+      timeout: 15000
     });
 
     this.sseService.emit('venta_eliminada', {
