@@ -5,7 +5,18 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "prisma": {
+    "seed": "ts-node -P tsconfig.json prisma/seed.ts"
+  },
   "scripts": {
+    "demo:check": "set -a && . ./.env.demo && set +a && node prisma/verificar-destino.js",
+    "demo:migrate": "set -a && . ./.env.demo && set +a && node prisma/verificar-destino.js && npx prisma migrate deploy",
+    "demo:seed": "set -a && . ./.env.demo && set +a && npx prisma db seed",
+    "demo:start": "set -a && . ./.env.demo && set +a && node prisma/verificar-destino.js && nest start",
+    "prod:start": "set -a && . ./.env.produccion && set +a && nest start",
+    "prod:dev": "set -a && . ./.env.produccion && set +a && nest start --watch",
+    "prod:migrate": "set -a && . ./.env.produccion && set +a && npx prisma migrate deploy",
+    "prod:respaldo": "set -a && . ./.env.produccion && set +a && pg_dump \"$DATABASE_URL\" -Fc -f \"$HOME/respaldo_farmacia_$(date +%Y%m%d_%H%M).dump\" && ls -lh \"$HOME\"/respaldo_farmacia_*.dump",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
