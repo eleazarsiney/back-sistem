@@ -308,7 +308,12 @@ export class VentasService {
     loteId: string,
     presentacion: string,
     cantidad: number,
-    producto: { cantCaja: number; cantBlister: number }
+    producto: { cantCaja: number; cantBlister: number },
+    datosDelLote?: {
+      productoId: string;
+      nombreProducto: string;
+      fechaDeVencimiento: Date | null;
+    }
   ) {
     const unidades = this.calcularUnidades(
       presentacion,
@@ -317,9 +322,52 @@ export class VentasService {
       producto.cantBlister
     );
 
-    await prs.lote.update({
-      where: { id: loteId },
-      data: { stockTotal: { increment: unidades } },
+    const lote = await prs.lote.findUnique({ where: { id: loteId } });
+
+    if (lote) {
+      await prs.lote.update({
+        where: { id: loteId },
+        data: { stockTotal: { increment: unidades } },
+      });
+      return unidades;
+    }
+
+    // El lote ya no existe: RegistrarVenta lo elimina cuando una venta
+    // "unitario" lo deja en cero. Como ListaProductos.loteId no tiene clave
+    // foránea, la venta sigue apuntando a un lote borrado y al editarla
+    // fallaba con P2025, perdiéndose el stock que había que devolver.
+    //
+    // Se recrea con el MISMO id para que las demás ventas que lo referencian
+    // sigan siendo válidas.
+    if (!datosDelLote) {
+      throw new NotFoundException(
+        `Lote con ID ${loteId} no encontrado y no se recibieron datos para recrearlo`
+      );
+    }
+
+    // Reconstruye el desglose de empaques a partir de lo que se devuelve.
+    let stockPorCaja = 0;
+    let stockPorBlister = 0;
+    if (presentacion === 'caja') {
+      stockPorCaja = cantidad;
+      stockPorBlister = producto.cantBlister > 0 ? producto.cantCaja * cantidad : 0;
+    } else if (presentacion === 'blister') {
+      stockPorBlister = cantidad;
+      stockPorCaja =
+        producto.cantCaja > 0 ? Math.floor(cantidad / producto.cantCaja) : 0;
+    }
+
+    await prs.lote.create({
+      data: {
+        id: loteId,
+        productoId: datosDelLote.productoId,
+        nombre: datosDelLote.nombreProducto,
+        origen: 'Recuperado al editar venta',
+        fechaVencimiento: datosDelLote.fechaDeVencimiento,
+        stockTotal: unidades,
+        stockPorCaja,
+        stockPorBlister,
+      },
     });
 
     return unidades;
@@ -492,7 +540,12 @@ export class VentasService {
 
           if (nueva === 0) {
             const unidades = await this.devolverStockAlLote(
-              prs, loteOriginalId, lista.presentacion, anterior, producto
+              prs, loteOriginalId, lista.presentacion, anterior, producto,
+              {
+                productoId: lista.productoId,
+                nombreProducto: lista.nombreProducto,
+                fechaDeVencimiento: lista.fechaDeVencimiento,
+              }
             );
             await prs.producto.update({
               where: { id: lista.productoId },
@@ -504,7 +557,12 @@ export class VentasService {
 
           if (hayCambioDeLote) {
             const unidadesDevueltas = await this.devolverStockAlLote(
-              prs, loteOriginalId, lista.presentacion, anterior, producto
+              prs, loteOriginalId, lista.presentacion, anterior, producto,
+              {
+                productoId: lista.productoId,
+                nombreProducto: lista.nombreProducto,
+                fechaDeVencimiento: lista.fechaDeVencimiento,
+              }
             );
             const unidadesDescontadas = await this.descontarStockDelLote(
               prs, loteDestinoId, lista.presentacion, nueva, producto
@@ -550,6 +608,18 @@ export class VentasService {
           );
 
           if (diferencia > 0) {
+            // Se vende más: hay que sacar stock del lote, así que debe existir.
+            // Si fue eliminado al agotarse, no hay de dónde sacar: se avisa con
+            // un mensaje claro en vez del P2025 que salía antes.
+            const loteOrigen = await prs.lote.findUnique({
+              where: { id: loteOriginalId }
+            });
+            if (!loteOrigen) {
+              throw new NotFoundException(
+                `El lote de "${lista.nombreProducto}" ya no existe (se agotó en otra venta), ` +
+                `por lo que no se puede aumentar la cantidad. Usa "Cambiar lote" para elegir otro.`
+              );
+            }
             await prs.lote.update({
               where: { id: loteOriginalId },
               data: { stockTotal: { decrement: unidadesAjuste } }
@@ -559,13 +629,20 @@ export class VentasService {
               data: { cantUnidad: { decrement: unidadesAjuste } }
             });
           } else if (diferencia < 0) {
-            await prs.lote.update({
-              where: { id: loteOriginalId },
-              data: { stockTotal: { increment: unidadesAjuste } }
-            });
+            // Se vende menos: se devuelve stock al lote. Si el lote fue
+            // eliminado al agotarse, devolverStockAlLote lo recrea con el
+            // mismo id en vez de fallar.
+            const unidadesDevueltas = await this.devolverStockAlLote(
+              prs, loteOriginalId, lista.presentacion, Math.abs(diferencia), producto,
+              {
+                productoId: lista.productoId,
+                nombreProducto: lista.nombreProducto,
+                fechaDeVencimiento: lista.fechaDeVencimiento,
+              }
+            );
             await prs.producto.update({
               where: { id: lista.productoId },
-              data: { cantUnidad: { increment: unidadesAjuste } }
+              data: { cantUnidad: { increment: unidadesDevueltas } }
             });
           }
         }
