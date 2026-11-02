@@ -1,3 +1,5 @@
+import { ListadoQuery } from '../common/listado';
+import { rethrowKnownError } from '../common/operation-errors';
 import { Controller, Get, Post, Body, Param, Query, Delete, Put, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { ComprasService } from './compras.service';
 import { CreateCompraAndProductoDto } from './create-compra.dto';
@@ -9,6 +11,11 @@ export class ComprasController {
   constructor(private readonly comprasService: ComprasService) { }
 
   // ── Rutas estáticas primero ──────────────────────────────
+  @Get('listado')
+  listarPagina(@Query() query: ListadoQuery) {
+    return this.comprasService.listarPagina(query);
+  }
+
   @Get()
   obtenerTodo() {
     return this.comprasService.ObtenerTodasLasCompras();
@@ -70,8 +77,9 @@ export class ComprasController {
     try {
       return await this.comprasService.eliminarCompraCompleta(id);
     } catch (error) {
+      rethrowKnownError(error);
       if (error instanceof NotFoundException) throw error;
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException('No se pudo completar la operación. Inténtalo de nuevo.');
     }
   }
 }

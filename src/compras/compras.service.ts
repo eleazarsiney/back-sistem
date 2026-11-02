@@ -1,3 +1,5 @@
+import { ListadoQuery, opcionesListado, paginaListado } from '../common/listado';
+import { rethrowKnownError } from '../common/operation-errors';
 import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateCompraAndProductoDto } from './create-compra.dto';
@@ -11,6 +13,16 @@ export class ComprasService {
         private readonly prisma: PrismaService,
         private readonly sseService: SseService,
     ) { }
+
+  async listarPagina(query: ListadoQuery) {
+    const filtro = { contains: query.nombre?.trim() ?? '', mode: 'insensitive' as const };
+    const opciones = opcionesListado(query, [{ Proveedor: filtro }, { Proveedores: { is: { nombre: filtro } } }]);
+    const rows = await this.prisma.compra.findMany({
+      ...opciones,
+      include: { Proveedores: true, DetalleDeCompras: true },
+    });
+    return paginaListado(rows);
+  }
 
     async RegistarNuevaCompra(data: CreateCompraAndProductoDto) {
         try {
@@ -95,6 +107,7 @@ export class ComprasService {
 
             return result;
         } catch (error) {
+            rethrowKnownError(error);
             console.log("el error es:", error);
             throw new InternalServerErrorException("error al registrar la compra", error);
         }
@@ -306,6 +319,7 @@ export class ComprasService {
 
             return result;
         } catch (error) {
+            rethrowKnownError(error);
             console.log("el error al actualizar la compra es:", error);
             if (error instanceof NotFoundException) throw error;
             throw new InternalServerErrorException("error al actualizar la compra", error);
@@ -461,6 +475,7 @@ export class ComprasService {
 
             return compra;
         } catch (error) {
+            rethrowKnownError(error);
             if (error instanceof NotFoundException) throw error;
             throw new InternalServerErrorException("error al obtener la compra", error);
         }

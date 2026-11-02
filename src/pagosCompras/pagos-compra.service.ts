@@ -1,3 +1,4 @@
+import { rethrowKnownError } from '../common/operation-errors';
 // pagos-compra.service.ts
 
 import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
@@ -38,6 +39,7 @@ export class PagosCompraService {
 
             return pago;
         } catch (error) {
+            rethrowKnownError(error);
             console.error('Error creando pago de compra:', error);
             throw new InternalServerErrorException('Error al crear el pago');
         }
@@ -71,6 +73,7 @@ export class PagosCompraService {
                 orderBy: { fechaPago: 'desc' }
             });
         } catch (error) {
+            rethrowKnownError(error);
             console.error('Error obteniendo pagos de compra:', error);
             throw new InternalServerErrorException('Error al obtener los pagos');
         }
@@ -126,6 +129,7 @@ export class PagosCompraService {
 
             return pago;
         } catch (error) {
+            rethrowKnownError(error);
             console.error('Error actualizando pago de compra:', error);
             throw new InternalServerErrorException('Error al actualizar el pago');
         }
@@ -144,6 +148,7 @@ export class PagosCompraService {
 
             return { mensaje: `Pago ${id} eliminado correctamente` };
         } catch (error) {
+            rethrowKnownError(error);
             console.error('Error eliminando pago de compra:', error);
             throw new InternalServerErrorException('Error al eliminar el pago');
         }

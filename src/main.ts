@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { OperationErrorsFilter } from './common/operation-errors.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.useGlobalFilters(new OperationErrorsFilter());
 
   // 🔥 Habilitar CORS para permitir peticiones desde tu frontend (vite, React, etc.)
   app.enableCors({

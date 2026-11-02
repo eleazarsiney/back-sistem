@@ -1,3 +1,5 @@
+import { ListadoQuery } from '../common/listado';
+import { rethrowKnownError } from '../common/operation-errors';
 import {
   Controller,
   Post,
@@ -18,6 +20,11 @@ export class VentasController {
   constructor(private readonly ventasService: VentasService) { }
 
   // ── Rutas estáticas primero (sin parámetros dinámicos) ──────────────────
+  @Get('listado')
+  listarPagina(@Query() query: ListadoQuery) {
+    return this.ventasService.listarPagina(query);
+  }
+
   @Get()
   obtenerVentas(@Query('clienteId') clienteId?: string) {
     if (clienteId) {
@@ -41,8 +48,9 @@ export class VentasController {
     try {
       return await this.ventasService.RegistrarVenta(createVentaDto);
     } catch (error) {
+      rethrowKnownError(error);
       if (error instanceof BadRequestException) throw error;
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException('No se pudo completar la operación. Inténtalo de nuevo.');
     }
   }
 
@@ -76,8 +84,9 @@ export class VentasController {
     try {
       return await this.ventasService.EditarVenta(ventaId, data);
     } catch (error) {
+      rethrowKnownError(error);
       if (error instanceof BadRequestException) throw error;
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException('No se pudo completar la operación. Inténtalo de nuevo.');
     }
   }
 
@@ -92,8 +101,9 @@ export class VentasController {
     try {
       return await this.ventasService.eliminarVentaCompleta(ventaId);
     } catch (error) {
+      rethrowKnownError(error);
       if (error instanceof BadRequestException) throw error;
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException('No se pudo completar la operación. Inténtalo de nuevo.');
     }
   }
 }

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { rethrowKnownError } from '../common/operation-errors';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Producto } from 'generated/prisma';
 import { NuevoProductoCompletoDto, PropiedadesNuevoProductoDto } from './updateProduc.dto';
@@ -108,8 +109,9 @@ export class ProductsService {
 
       return result;
     } catch (error) {
+      rethrowKnownError(error);
       console.log('el error al guardar un nuevo producto es : ', error);
-      return error;
+      throw new InternalServerErrorException('No se pudo guardar el producto. Inténtalo de nuevo.');
     }
   }
 

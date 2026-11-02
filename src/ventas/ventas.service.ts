@@ -1,3 +1,5 @@
+import { ListadoQuery, opcionesListado, paginaListado } from '../common/listado';
+import { rethrowKnownError } from '../common/operation-errors';
 import {
   Injectable,
   InternalServerErrorException,
@@ -14,6 +16,16 @@ export class VentasService {
     private readonly prisma: PrismaService,
     private readonly sseService: SseService,
   ) { }
+
+  async listarPagina(query: ListadoQuery) {
+    const filtro = { contains: query.nombre?.trim() ?? '', mode: 'insensitive' as const };
+    const opciones = opcionesListado(query, [{ nombreCliente: filtro }, { cliente: { is: { nombre: filtro } } }]);
+    const rows = await this.prisma.venta.findMany({
+      ...opciones,
+      include: { cliente: true },
+    });
+    return paginaListado(rows);
+  }
 
   async RegistrarVenta(data: CreateVentaDto) {
     try {
@@ -37,24 +49,38 @@ export class VentasService {
           },
         });
 
-        for (const product of data.detalles) {
+        const lotesAgotados = new Set<string>();
+        for (const [indice, product] of data.detalles.entries()) {
+          const referencia = `Renglón ${indice + 1}, producto "${product.nombreProducto}" (ID ${product.productoId})`;
           const productoEnBD = await prisma.producto.findUnique({
             where: { id: product.productoId }
           });
 
+          if (!productoEnBD) {
+            throw new BadRequestException(`${referencia}: el producto ya no existe. Actualiza la lista de productos.`);
+          }
+          if (!product.loteId) {
+            throw new BadRequestException(`${referencia}: falta seleccionar un lote. Selecciona un lote disponible.`);
+          }
           const productoLote = await prisma.lote.findUnique({
             where: { id: product.loteId },
           });
 
-          if (!productoLote || !productoEnBD) {
+          if (!productoLote) {
             throw new BadRequestException(
-              `Producto con ID ${product.productoId} no encontrado.`,
+              `${referencia}: el lote ${product.loteId} ya no existe. El producto sí existe; actualiza sus lotes y selecciona uno disponible.`,
             );
           }
+          if (productoLote.productoId !== product.productoId) {
+            throw new BadRequestException(`${referencia}: el lote ${product.loteId} no pertenece a este producto. Vuelve a seleccionar el lote.`);
+          }
 
-          if (productoLote.stockTotal < product.cantidad) {
+          const unidadesSolicitadas = this.calcularUnidades(
+            product.presentacion, product.cantidad, productoEnBD.cantCaja, productoEnBD.cantBlister,
+          );
+          if (productoLote.stockTotal < unidadesSolicitadas) {
             throw new BadRequestException(
-              `Stock insuficiente para el producto ${product.nombreProducto}. Stock disponible: ${productoLote.stockTotal}, solicitado: ${product.cantidad}`,
+              `Stock insuficiente para ${productoEnBD.nombre} en el lote ${product.loteId}, renglón ${indice + 1}. Disponible después de los renglones anteriores: ${productoLote.stockTotal} unidades; solicitado en este renglón: ${unidadesSolicitadas} unidades (${product.cantidad} ${product.presentacion}).`,
             );
           }
 
@@ -137,11 +163,16 @@ export class VentasService {
             });
 
             if (totalActualUnitario <= 0) {
-              await prisma.lote.delete({ where: { id: product.loteId } });
+              lotesAgotados.add(product.loteId);
             }
           }
         }
 
+        // Conserva los lotes hasta validar todos los renglones: si se repiten,
+        // el siguiente debe informar stock cero, no un lote inexistente.
+        for (const loteId of lotesAgotados) {
+          await prisma.lote.delete({ where: { id: loteId } });
+        }
         return ventaRealizada;
       });
 
@@ -157,6 +188,7 @@ export class VentasService {
       return ventaRealizada;
 
     } catch (error) {
+      rethrowKnownError(error);
       console.error('Error al registrar la venta:', error);
       throw new InternalServerErrorException('Error al procesar la venta.');
     }
@@ -221,6 +253,7 @@ export class VentasService {
       await this.prisma.venta.deleteMany();
       return { message: 'Todos los datos han sido eliminados' };
     } catch (error) {
+      rethrowKnownError(error);
       throw new InternalServerErrorException("Error al borrar datos");
     }
   }
@@ -620,6 +653,11 @@ export class VentasService {
                 `por lo que no se puede aumentar la cantidad. Usa "Cambiar lote" para elegir otro.`
               );
             }
+            if (loteOrigen.stockTotal < unidadesAjuste) {
+              throw new BadRequestException(
+                `Stock insuficiente para ${lista.nombreProducto} en el lote ${loteOriginalId}. Disponible: ${loteOrigen.stockTotal} unidades; adicional solicitado: ${unidadesAjuste} unidades.`,
+              );
+            }
             await prs.lote.update({
               where: { id: loteOriginalId },
               data: { stockTotal: { decrement: unidadesAjuste } }
@@ -717,6 +755,7 @@ export class VentasService {
       return ventaActualizada;
 
     } catch (error) {
+      rethrowKnownError(error);
       console.error("Error editando venta:", error);
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
