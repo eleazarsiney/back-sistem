@@ -174,6 +174,10 @@ export class VentasService {
           await prisma.lote.delete({ where: { id: loteId } });
         }
         return ventaRealizada;
+      }, {
+        // ✅ CAMBIO 2: Prisma da 5 s por defecto; con Railway (latencia por query) no alcanza
+        maxWait: 10000,
+        timeout: 30000,
       });
 
       this.sseService.emit('venta_creada', {
@@ -271,27 +275,28 @@ export class VentasService {
         where: { id: productoVendido.productoId }
       });
 
-      if (!producto) throw new BadRequestException('Producto no encontrado');
+      // Si el producto ya no existe, solo se quita la línea (no hay stock que restaurar)
+      if (producto) {
+        let unidadesADevolver = 0;
 
-      let unidadesADevolver = 0;
-
-      if (productoVendido.presentacion === 'caja') {
-        if (producto.cantBlister > 0) {
-          const resultadoBlister = producto.cantCaja * productoVendido.cantidad;
-          unidadesADevolver = producto.cantBlister * resultadoBlister;
+        if (productoVendido.presentacion === 'caja') {
+          if (producto.cantBlister > 0) {
+            const resultadoBlister = producto.cantCaja * productoVendido.cantidad;
+            unidadesADevolver = producto.cantBlister * resultadoBlister;
+          } else {
+            unidadesADevolver = producto.cantCaja * productoVendido.cantidad;
+          }
+        } else if (productoVendido.presentacion === 'blister') {
+          unidadesADevolver = producto.cantBlister * productoVendido.cantidad;
         } else {
-          unidadesADevolver = producto.cantCaja * productoVendido.cantidad;
+          unidadesADevolver = productoVendido.cantidad;
         }
-      } else if (productoVendido.presentacion === 'blister') {
-        unidadesADevolver = producto.cantBlister * productoVendido.cantidad;
-      } else {
-        unidadesADevolver = productoVendido.cantidad;
-      }
 
-      await prs.producto.update({
-        where: { id: productoVendido.productoId },
-        data: { cantUnidad: { increment: unidadesADevolver } }
-      });
+        await prs.producto.update({
+          where: { id: productoVendido.productoId },
+          data: { cantUnidad: { increment: unidadesADevolver } }
+        });
+      }
 
       await prs.listaProductos.delete({ where: { id: productoVendidoId } });
 
@@ -557,7 +562,23 @@ export class VentasService {
           const producto = await prs.producto.findUnique({
             where: { id: lista.productoId }
           });
-          if (!producto) throw new NotFoundException('Producto no encontrado');
+          if (!producto) {
+            const cantNueva = item.nuevaCantidad;
+            const cambiaLote = item.nuevoLoteId && item.nuevoLoteId !== lista.loteId;
+
+            // Quitar la línea: no hay stock que devolver porque el producto ya no existe
+            if (cantNueva === 0) {
+              await prs.listaProductos.delete({ where: { id: lista.id } });
+              continue;
+            }
+            // Sin cambios en esta línea: no estorbar la edición del resto de la venta
+            if (cantNueva === lista.cantidad && !cambiaLote) continue;
+
+            throw new BadRequestException(
+              `El producto "${lista.nombreProducto}" ya no existe en el catálogo. ` +
+              `Solo se puede quitar de la venta, no cambiar su cantidad ni su lote.`
+            );
+          }
 
           const loteOriginalId = lista.loteId;
           const hayCambioDeLote = item.nuevoLoteId && item.nuevoLoteId !== loteOriginalId;
@@ -623,6 +644,13 @@ export class VentasService {
           }
 
           const diferencia = nueva - anterior;
+
+          // ✅ CAMBIO 3: Sin cambios reales en esta línea: no hacer ninguna query
+          const mismoSubtotal = item.subtotal === undefined || item.subtotal === lista.subtotal;
+          const mismaGanancia = item.subGanancia === undefined || item.subGanancia === lista.subGanancia;
+          if (diferencia === 0 && mismoSubtotal && mismaGanancia) {
+            continue;
+          }
 
           await prs.listaProductos.update({
             where: { id: lista.id },
@@ -741,6 +769,10 @@ export class VentasService {
             }
           }
         });
+      }, {
+        // ✅ CAMBIO 1: Prisma da 5 s por defecto; EditarVenta pasó de eso (5433 ms)
+        maxWait: 10000,
+        timeout: 30000,
       });
 
       this.sseService.emit('venta_editada', {
