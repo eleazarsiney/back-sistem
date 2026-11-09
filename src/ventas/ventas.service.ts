@@ -29,6 +29,11 @@ export class VentasService {
 
   async RegistrarVenta(data: CreateVentaDto) {
     try {
+      for (const [index, item] of data.detalles.entries()) {
+        if (!Number.isSafeInteger(item.cantidad) || item.cantidad <= 0) {
+          throw new BadRequestException(`Renglón ${index + 1}: la cantidad debe ser un entero mayor que cero.`);
+        }
+      }
       const ventaRealizada = await this.prisma.$transaction(async (prisma) => {
         const ultimaVenta = await prisma.venta.findFirst({
           orderBy: { correlativo: 'desc' },
@@ -467,6 +472,17 @@ export class VentasService {
     }
   ) {
     try {
+      for (const item of data.cambios) {
+        if (!Number.isSafeInteger(item.nuevaCantidad) || item.nuevaCantidad < 0 || (item.esNuevo && item.nuevaCantidad === 0)) {
+          throw new BadRequestException('La cantidad debe ser un entero positivo; cero solo permite quitar un renglón existente.');
+        }
+        if (item.subtotal !== undefined && (!Number.isFinite(item.subtotal) || item.subtotal < 0)) {
+          throw new BadRequestException('El subtotal debe ser un número mayor o igual a cero.');
+        }
+        if (item.subGanancia !== undefined && !Number.isFinite(item.subGanancia)) {
+          throw new BadRequestException('La ganancia debe ser un número válido.');
+        }
+      }
       const ventaActualizada = await this.prisma.$transaction(async (prs) => {
         const productosActuales = await prs.listaProductos.findMany({
           where: { ventaId },
@@ -552,11 +568,8 @@ export class VentasService {
           // ══════════════════════════════════════════════════════════════════
           const lista = productosMap.get(item.listaProductoId);
 
-          // Guard: si no existe en el mapa y no es nuevo, saltarlo silenciosamente
-          // (puede pasar con items de venta nueva donde id===loteId)
           if (!lista) {
-            console.warn(`[EditarVenta] Item ${item.listaProductoId} no encontrado en productosMap y esNuevo=false, saltando.`);
-            continue;
+            throw new BadRequestException(`El renglón ${item.listaProductoId} no pertenece a esta venta o ya no existe. Actualiza la venta antes de guardar.`);
           }
 
           const producto = await prs.producto.findUnique({
@@ -635,8 +648,8 @@ export class VentasService {
               data: {
                 cantidad: nueva,
                 loteId: loteDestinoId,
-                subtotal: nuevoSubtotal,
-                subGanancia: nuevaSubGanancia,
+                subtotal: item.subtotal ?? nuevoSubtotal,
+                subGanancia: item.subGanancia ?? nuevaSubGanancia,
                 fechaDeVencimiento: loteDestino?.fechaVencimiento ?? null,
               }
             });
